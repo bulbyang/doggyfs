@@ -454,70 +454,50 @@ int doggy_write(const char *path, const char *buf, size_t size, off_t offset,
         return -EEXIST;
     }
 
-    int new_blk_n = offset / BLOCK_SIZE;
-    int old_blk_n = file->size / BLOCK_SIZE;
-    int new_blk_end = offset % BLOCK_SIZE;
-    int last_idx = file->start_block;
-    last_idx = get_last_block_index(last_idx);
-    // seek to the offset
-    while (new_blk_n > old_blk_n)
+    int blk_idx = file->start_block;
+    if (blk_idx == -1 && size > 0)
     {
-        int new_blk_idx = get_free_block_index();
-        if (new_blk_idx == -1)
+        blk_idx = get_free_block_index();
+        if (blk_idx == -1)
         {
-            return -EDQUOT;
+            return -ENOSPC;
         }
-        if (last_idx == -1)
+        file->start_block = blk_idx;
+    }
+
+    while (offset > BLOCK_SIZE)
+    {
+        blk_idx = dfs.fat[blk_idx];
+        offset -= BLOCK_SIZE;
+    }
+
+    if (offset)
+    {
+        doggy_block *blk = &(dfs.blocks[blk_idx]);
+        memcpy(blk->file_data, buf, offset);
+    }
+
+    while (size > offset)
+    {
+        if (dfs.fat[blk_idx] == -1)
         {
-            file->start_block = new_blk_idx;
+            int n_blk_idx = get_free_block_index();
+            dfs.fat[blk_idx] = n_blk_idx;
+        }
+        blk_idx = dfs.fat[blk_idx];
+        doggy_block *blk = &(dfs.blocks[blk_idx]);
+        if (size > (offset + BLOCK_SIZE))
+        {
+            memcpy(blk->file_data, buf + offset, BLOCK_SIZE);
+            offset += BLOCK_SIZE;
         }
         else
         {
-            dfs.fat[last_idx] = new_blk_idx;
-        }
-
-        last_idx = new_blk_idx;
-        old_blk_n++;
-    }
-    doggy_block last_blk = dfs.blocks[last_idx];
-    // start actual write
-
-    // write partial block
-    if ((BLOCK_SIZE - new_blk_end) >= size)
-    {
-        memcpy(last_blk.file_data, buf, size);
-        return 0;
-    }
-
-    memcpy(last_blk.file_data, buf, BLOCK_SIZE - new_blk_end);
-
-    // write to all other whole blocks
-
-    off_t cpy_off = BLOCK_SIZE - new_blk_end;
-
-    while (cpy_off < size)
-    {
-        int new_blk_idx = get_free_block_index();
-        if (new_blk_idx == -1)
-        {
-            return -EDQUOT;
-        }
-
-        dfs.fat[last_idx] = new_blk_idx;
-        last_idx = new_blk_idx;
-        last_blk = dfs.blocks[last_idx];
-        if (cpy_off + BLOCK_SIZE > size)
-        {
-            memcpy(last_blk.file_data, buf + cpy_off, size - cpy_off);
-            cpy_off = size;
-        }
-        else
-        {
-            memcpy(last_blk.file_data, buf + cpy_off, BLOCK_SIZE);
-            cpy_off += BLOCK_SIZE;
+            memcpy(blk->file_data, buf + offset, size - offset);
+            offset = size;
         }
     }
-    file->size = cpy_off;
+
     return offset;
 }
 
