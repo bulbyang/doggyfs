@@ -12,12 +12,8 @@
 
 #include <fuse.h>
 #include <stdio.h>
-#include <string.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <fnmatch.h>
-#include "doggy_structure.h"
+#include "utils.h"
 
 #define MEMORI_SIZE 256 * 1024 * 1024
 #define BLOCK_SIZE 1024
@@ -27,127 +23,10 @@
 int NNODES;
 int NBLOCKS;
 int persistent = 0;
-FILE *fp;
 
 doggy_file *current_dir;
 doggy_file *last_dir;
 doggy_filesystem dfs;
-
-char *path2name(const char *path)
-{
-    char *s, *ret;
-    s = (char *)malloc(sizeof(char) * strlen(path));
-    strcpy(s, path);
-    for (size_t i = strlen(path); i >= 0; i--)
-    {
-        if (s[i] == '/')
-        {
-            ret = (char *)malloc(sizeof(char) * strlen(s + i + 1));
-            strcpy(ret, s + i + 1);
-            free(s);
-            return ret;
-        }
-    }
-}
-
-doggy_file *path_search(const char *path)
-{
-    char *tmp_path = (char *)malloc(sizeof(char) * strlen(path));
-    strcpy(tmp_path, path);
-
-    doggy_file *cur = (doggy_file *)malloc(sizeof(doggy_file));
-
-    char *p;
-    p = strtok(tmp_path, "/");
-
-    if (p == NULL) // 如果p为根目录直接返回就行
-    {
-        free(tmp_path);
-        return dfs.root_dir;
-    }
-
-    if (strcmp(p, ".") == 0)
-    {
-        cur = current_dir;
-        p = strtok(NULL, "/");
-    }
-    else if (strcmp(p, "..") == 0)
-    {
-        cur = last_dir;
-        p = strtok(NULL, "/");
-    }
-    else
-    {
-        cur = dfs.root_dir;
-    }
-
-    int ndirectory_entry = BLOCK_SIZE / sizeof(doggy_file *);
-    while (p != NULL)
-    {
-        int icur_block = cur->start_block;
-        while (icur_block != -1)
-        {
-            doggy_block *cur_block = &(dfs.blocks[icur_block]);
-            int finded = 0;
-            int i;
-            for (i = 0; i < ndirectory_entry; i++)
-            {
-                if (cur_block->directory[i] != NULL && strcmp(p, cur_block->directory[i]->filename) == 0)
-                {
-                    finded = 1;
-                    cur = cur_block->directory[i];
-                    break;
-                }
-            }
-            if (finded)
-            {
-                p = strtok(NULL, "/");
-                if (cur_block->directory[i]->isdir == 0 && p != NULL)
-                {
-                    return NULL;
-                }
-
-                break;
-            }
-            icur_block = dfs.fat[icur_block];
-        }
-        if (icur_block == -1)
-        {
-            free(tmp_path);
-            return NULL;
-        }
-    }
-    free(tmp_path);
-
-    return cur;
-}
-
-int get_free_block_index()
-{
-    int i;
-    for (i = 0; i < MEMORI_SIZE / BLOCK_SIZE; i++)
-    {
-        if (dfs.fat[i] == -2)
-        {
-            dfs.fat[i] = -1;
-            return i;
-        }
-    }
-    // perror("No more nodes left!!");
-    return -ENOSPC;
-}
-
-int get_last_block_index(int idx)
-{
-    if (idx < 0)
-    {
-        return -1;
-    }
-
-    while (dfs.fat[idx] != -1)
-        idx = dfs.fat[idx];
-    return idx;
-}
 
 int doggy_init(char *root_path)
 {
@@ -169,6 +48,7 @@ int doggy_init(char *root_path)
 
 void doggy_destroy(void *v)
 {
+    return;
 }
 
 int doggy_getattr(const char *path, struct stat *stbuf)
@@ -186,9 +66,9 @@ int doggy_getattr(const char *path, struct stat *stbuf)
 
     if (cur_file == NULL)
     {
-        FILE *fp = fopen("/home/fighter/linux/fuse/doggyfs/out.txt", "w");
-        fputs("no such file\n", fp);
-        fclose(fp);
+        // FILE *fp = fopen("/home/fighter/linux/fuse/doggyfs/out.txt", "w");
+        // fputs("no such file\n", fp);
+        // fclose(fp);
         return -ENOENT;
     }
     stbuf->st_mode = cur_file->mode;
@@ -217,9 +97,9 @@ int doggy_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         doggy_block block = dfs.blocks[block_index];
         for (size_t i = 0; i < BLOCK_SIZE / sizeof(doggy_file *); i++)
         {
-            FILE *fp = fopen("/home/fighter/linux/fuse/doggyfs/out.txt", "w");
-            fputc('0' + i, fp);
-            fclose(fp);
+            // FILE *fp = fopen("/home/fighter/linux/fuse/doggyfs/out.txt", "w");
+            // fputc('0' + i, fp);
+            // fclose(fp);
             if (block.directory[i] != NULL)
             {
                 filler(buf, block.directory[i]->filename, NULL, 0);
@@ -233,8 +113,8 @@ int doggy_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 int doggy_open(const char *path, struct fuse_file_info *fi)
 {
-    doggy_file *cur;
-    if ((cur = path_search(path)) == NULL)
+    doggy_file *cur = path_search(path);
+    if (cur == NULL)
     {
         return -ENOENT;
     }
@@ -382,6 +262,11 @@ int doggy_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
         int last_dir_blk_idx = get_last_block_index(dir->start_block);
         int new_blk_idx = get_free_block_index();
+        if (new_blk_idx == -1)
+        {
+            return -ENOSPC;
+        }
+
         doggy_block *new_blk = &(dfs.blocks[new_blk_idx]);
         new_blk->directory[0] = file;
         dfs.fat[last_dir_blk_idx] = new_blk_idx;
@@ -407,46 +292,61 @@ int doggy_read(const char *path, char *buf, size_t size, off_t offset,
         return -EPERM;
     }
 
-    // cant read more than the size of file
-    size = size > (file->size - offset) ? file->size - offset : size;
-    int last_blk_idx = get_last_block_index(file->start_block);
-    int blk_off = offset % BLOCK_SIZE;
-    int blk_off_idx = offset / BLOCK_SIZE;
-
-    // read partial
-    doggy_block blk = dfs.blocks[blk_off_idx];
-    if (last_blk_idx == blk_off_idx)
+    int blk_idx = file->start_block;
+    if (blk_idx == -1)
     {
-        memcpy(buf, blk.file_data + blk_off, file->size - offset);
-        return size;
+        return 0;
     }
 
-    memcpy(buf, blk.file_data + blk_off, BLOCK_SIZE - blk_off);
-    off_t cpy_off = BLOCK_SIZE - blk_off;
-
-    // read all other whole blocks
-    while (cpy_off < size)
+    while (offset > BLOCK_SIZE)
     {
-        blk_off_idx = dfs.fat[blk_off_idx];
-        blk = dfs.blocks[blk_off_idx];
-        if (size > cpy_off + BLOCK_SIZE)
+        blk_idx = dfs.fat[blk_idx];
+        offset -= BLOCK_SIZE;
+    }
+
+    doggy_block *blk = &(dfs.blocks[blk_idx]);
+    if (offset)
+    {
+        memcpy(buf, blk->file_data + offset, BLOCK_SIZE - offset);
+        offset = BLOCK_SIZE - offset;
+    }
+
+    size = size > file->size ? file->size : size;
+    while (size > offset)
+    {
+        blk_idx = dfs.fat[blk_idx];
+        if (blk_idx == -1)
         {
-            memcpy(buf + cpy_off, blk.file_data, BLOCK_SIZE);
-            cpy_off += BLOCK_SIZE;
+            break;
+        }
+        blk = &(dfs.blocks[blk_idx]);
+        if (size > (offset + BLOCK_SIZE))
+        {
+            memcpy(buf + offset, blk->file_data, BLOCK_SIZE);
+            offset += BLOCK_SIZE;
         }
         else
         {
-            memcpy(buf + cpy_off, blk.file_data, size - cpy_off);
-            cpy_off = size;
+            memcpy(buf + offset, blk->file_data, size - offset);
+            offset = size;
         }
     }
-
-    return size;
+    FILE *fp = fopen("/home/fighter/linux/fuse/doggyfs/out.txt", "w");
+    fputs("read:", fp);
+    fputs(buf, fp);
+    fputs("\n", fp);
+    fclose(fp);
+    return offset;
 }
 
 int doggy_write(const char *path, const char *buf, size_t size, off_t offset,
                 struct fuse_file_info *fi)
 {
+    FILE *fp = fopen("/home/fighter/linux/fuse/doggyfs/out.txt", "w");
+    fputs("write:", fp);
+    fputs(buf, fp);
+    fputs("\n", fp);
+    fclose(fp);
     // return number of bytes written
     doggy_file *file = path_search(path);
     if (file == NULL)
@@ -474,16 +374,21 @@ int doggy_write(const char *path, const char *buf, size_t size, off_t offset,
     if (offset)
     {
         doggy_block *blk = &(dfs.blocks[blk_idx]);
-        memcpy(blk->file_data, buf, offset);
+        memcpy(blk->file_data + offset, buf, BLOCK_SIZE - offset);
+        offset = BLOCK_SIZE - offset;
     }
 
     while (size > offset)
     {
+
         if (dfs.fat[blk_idx] == -1)
         {
             int n_blk_idx = get_free_block_index();
+            if (n_blk_idx == -1)
+                return -ENOSPC;
             dfs.fat[blk_idx] = n_blk_idx;
         }
+
         blk_idx = dfs.fat[blk_idx];
         doggy_block *blk = &(dfs.blocks[blk_idx]);
         if (size > (offset + BLOCK_SIZE))
@@ -497,7 +402,7 @@ int doggy_write(const char *path, const char *buf, size_t size, off_t offset,
             offset = size;
         }
     }
-
+    file->size = offset;
     return offset;
 }
 
@@ -529,6 +434,11 @@ int doggy_truncate(const char *path, off_t offset)
             while (new_blocks != old_blocks)
             {
                 int i = get_free_block_index();
+                if (i == -1)
+                {
+                    return -ENOSPC;
+                }
+
                 memset(dfs.blocks[i].file_data, '\0', BLOCK_SIZE);
                 if (last_block_index == -1)
                 {

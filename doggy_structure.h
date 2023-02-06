@@ -1,3 +1,5 @@
+#include <sys/types.h>
+
 #define MEMORI_SIZE 256 * 1024 * 1024
 #define BLOCK_SIZE 1024
 #define NAME_LENGTH 64
