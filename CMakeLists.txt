@@ -12,6 +12,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 find_package(FUSE REQUIRED)
 
 include_directories(${FUSE_INCLUDE_DIR})
-add_executable(doggyfs doggyfs.c doggy_structure.h) 
+add_executable(doggyfs doggyfs.c doggy_structure.h utils.c utils.h) 
 target_link_libraries(doggyfs ${FUSE_LIBRARIES})
 
