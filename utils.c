@@ -101,3 +101,9 @@ int get_last_block_index(int idx)
         idx = dfs.fat[idx];
     return idx;
 }
+
+int free_block(int index)
+{
+    dfs.fat[index] = -2;
+    return 0;
+}
