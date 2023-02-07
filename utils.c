@@ -18,9 +18,12 @@ char *path2name(const char *path)
         }
     }
 }
-
+/// @brief 根据路径查找文件或目录
+/// @param path
+/// @return doggy_file *
 doggy_file *path_search(const char *path)
 {
+    // 新建一个字符串并将path复制到原有的tmp_path上，方便使用strtok
     char *tmp_path = (char *)malloc(sizeof(char) * strlen(path));
     strcpy(tmp_path, path);
 
@@ -35,6 +38,7 @@ doggy_file *path_search(const char *path)
         return dfs.root_dir;
     }
 
+    // 利用strtok拆分path，同时遍历每一级目录寻找目标文件
     int ndirectory_entry = BLOCK_SIZE / sizeof(doggy_file *);
     while (p != NULL)
     {
@@ -75,6 +79,8 @@ doggy_file *path_search(const char *path)
     return cur;
 }
 
+/// @brief 分配空闲块
+/// @return int 空闲块号
 int get_free_block_index()
 {
     int i;
@@ -86,10 +92,12 @@ int get_free_block_index()
             return i;
         }
     }
-    // perror("No more nodes left!!");
     return -1;
 }
 
+/// @brief 返回快号idx所属文件或目录的最后一个块号
+/// @param idx
+/// @return int 块号
 int get_last_block_index(int idx)
 {
     if (idx < 0)
@@ -102,6 +110,9 @@ int get_last_block_index(int idx)
     return idx;
 }
 
+/// @brief 释放index块
+/// @param index
+/// @return
 int free_block(int index)
 {
     dfs.fat[index] = -2;
