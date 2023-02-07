@@ -309,11 +309,12 @@ int doggy_read(const char *path, char *buf, size_t size, off_t offset,
             memcpy(buf, blk->file_data + offset, size);
             offset = size;
         }
+
+        blk_idx = dfs.fat[blk_idx];
     }
 
     while (size > offset)
     {
-        blk_idx = dfs.fat[blk_idx];
         if (blk_idx == -1)
         {
             break;
@@ -329,6 +330,7 @@ int doggy_read(const char *path, char *buf, size_t size, off_t offset,
             memcpy(buf + offset, blk->file_data, size - offset);
             offset = size;
         }
+        blk_idx = dfs.fat[blk_idx];
     }
     // FILE *fp = fopen("/home/fighter/linux/fuse/doggyfs/out.txt", "w");
     // fputs("read:", fp);
@@ -397,11 +399,7 @@ int doggy_write(const char *path, const char *buf, size_t size, off_t offset,
             memcpy(blk->file_data + offset, buf, size);
             offset = size;
         }
-    }
-
-    while (size > offset)
-    {
-        if (dfs.fat[blk_idx] == -1)
+        if (dfs.fat[blk_idx] == -1 && size > offset)
         {
             int n_blk_idx = get_free_block_index();
             if (n_blk_idx == -1)
@@ -409,6 +407,11 @@ int doggy_write(const char *path, const char *buf, size_t size, off_t offset,
             dfs.fat[blk_idx] = n_blk_idx;
         }
         blk_idx = dfs.fat[blk_idx];
+    }
+
+    while (size > offset)
+    {
+
         doggy_block *blk = &(dfs.blocks[blk_idx]);
         if (size > (offset + BLOCK_SIZE))
         {
@@ -420,6 +423,14 @@ int doggy_write(const char *path, const char *buf, size_t size, off_t offset,
             memcpy(blk->file_data, buf + offset, size - offset);
             offset = size;
         }
+        if (dfs.fat[blk_idx] == -1 && size > offset)
+        {
+            int n_blk_idx = get_free_block_index();
+            if (n_blk_idx == -1)
+                return -ENOSPC;
+            dfs.fat[blk_idx] = n_blk_idx;
+        }
+        blk_idx = dfs.fat[blk_idx];
     }
     // FILE *fp = fopen("/home/fighter/linux/fuse/doggyfs/out.txt", "w");
     // fputs("write:", fp);
