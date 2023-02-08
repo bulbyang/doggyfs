@@ -619,14 +619,14 @@ int doggy_unlink(const char *path)
     int blk_idx = dir->start_block;
     while (blk_idx != -1)
     {
-        int flag = 1;
+        // int flag = 1;
         doggy_block *block = &(dfs.blocks[blk_idx]);
         for (size_t i = 0; i < BLOCK_SIZE / sizeof(doggy_file *); i++)
         {
-            if (block->directory[i] != NULL && strcmp(block->directory[i]->filepath, path) != 0)
-            {
-                flag = 0;
-            }
+            // if (block->directory[i] != NULL && strcmp(block->directory[i]->filepath, path) != 0)
+            // {
+            //     flag = 0;
+            // }
 
             if (block->directory[i] != NULL && strcmp(block->directory[i]->filepath, path) == 0)
             {
@@ -637,26 +637,22 @@ int doggy_unlink(const char *path)
                 return 0;
             }
         }
-        if (flag)
-        {
-            if (blk_idx == dir->start_block)
-            {
-                dir->start_block = dfs.fat[blk_idx];
-            }
-            else
-            {
-                int tmp_blk = dir->start_block;
-                while (dfs.fat[tmp_blk] != blk_idx && tmp_blk != -1)
-                {
-                    tmp_blk = dfs.fat[tmp_blk];
-                }
-                dfs.fat[tmp_blk] = dfs.fat[blk_idx];
-            }
-            blk_idx = dfs.fat[blk_idx];
-            free_block(blk_idx);
-        }
-        else
-            blk_idx = dfs.fat[blk_idx];
+        // if (flag)
+        // {
+        //     if (blk_idx == dir->start_block)
+        //     {
+        //         dir->start_block = dfs.fat[blk_idx];
+        //     }
+        //     else
+        //     {
+        //         int tmp_blk = get_last_block_index(dir->start_block);
+        //         dfs.fat[tmp_blk] = dfs.fat[blk_idx];
+        //     }
+        //     blk_idx = dfs.fat[blk_idx];
+        //     free_block(blk_idx);
+        // }
+        // else
+        blk_idx = dfs.fat[blk_idx];
     }
     return -ENOENT; // No such file or directory
 }
@@ -689,13 +685,13 @@ int doggy_rmdir(const char *path)
     int last_blk_idx = -1;
     while (parent_blk_idx != -1)
     {
-        int flag = 1;
+        int flag = 1; // 用来标识该块中是否还有非空目录项
         doggy_block *block = &(dfs.blocks[parent_blk_idx]);
         for (size_t i = 0; i < BLOCK_SIZE / sizeof(doggy_file *); i++)
         {
             if (block->directory[i] != NULL && strcmp(block->directory[i]->filename, name) != 0)
             {
-                flag = 0;
+                flag = 0; // 仍然有非空目录项
             }
             if (block->directory[i] != NULL && strcmp(block->directory[i]->filename, name) == 0)
             {
@@ -771,8 +767,11 @@ int doggy_rename(const char *path, const char *newpath)
 
     doggy_file *nf = (doggy_file *)malloc(sizeof(doggy_file));
     memcpy(nf, file, sizeof(doggy_file));
-    strcpy(file->filepath, newpath);
-    strcpy(file->filename, path2name(newpath));
+    nf->filepath = (char *)malloc(sizeof(char) * strlen(newpath));
+    strcpy(nf->filepath, newpath);
+    char *name = path2name(newpath);
+    nf->filename = (char *)malloc(sizeof(char) * strlen(newpath));
+    strcpy(nf->filename, name);
 
     doggy_file *replaced = path_search(newpath);
     if (replaced != NULL && replaced->isdir == 0)
@@ -780,19 +779,19 @@ int doggy_rename(const char *path, const char *newpath)
         doggy_unlink(newpath);
     }
 
-    char *name = path2name(path);
-    char *dir_path = (char *)malloc(sizeof(char) * strlen(path));
-    if (strlen(path) - strlen(name) - 1 == 0)
+    char *dir_path = (char *)malloc(sizeof(char) * strlen(newpath));
+    if (strlen(newpath) - strlen(name) - 1 == 0)
     {
         dir_path = "/";
     }
     else
     {
-        strncpy(dir_path, path, strlen(path) - strlen(name) - 1);
+        strncpy(dir_path, newpath, strlen(newpath) - strlen(name) - 1);
     }
 
     // 查找上级目录
     doggy_file *dir = path_search(dir_path);
+    free(dir_path);
     if (dir == NULL)
     {
         return -ENOENT; // No such file or directory
